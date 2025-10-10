@@ -1,0 +1,298 @@
+---
+title: "Gestión y Organización de Datos: PRÁCTICA 1"
+author: Max Comerma i Martos (23925480Y)
+output: html_notebook
+---
+
+## EJERCICIOS 
+
+## EJERCICIO 0
+
+Depurad la base de datos `Netflix2020.xlsx` y cargad la base de datos `Netflix2020Depurado.csv`.
+
+```{r}
+#Instalamos y cargamos todos los paquetes necesarios 
+if (!require("readr")) {
+  install.packages("readr")
+  library("readr")
+}
+if (!require("tibble")) {
+  install.packages("tibble")
+  library("tibble")
+}
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library("ggplot2")
+}
+if (!require("tidyr")) {
+  install.packages("tidyr")
+  library("tidyr")
+}
+
+if (!require("forcats")) {
+  install.packages("forcats")
+  library("forcats")
+}
+
+if (!require("dplyr")) {
+  install.packages("dplyr")
+  library("dplyr")
+}
+if (!require("car")) {
+  install.packages("car")
+  library("car")
+  }
+if (!require("corrplot")) {
+  install.packages("corrplot")
+  library("corrplot")
+}
+if (!require("doBy")) {
+  install.packages("doBy")
+  library("doBy")
+}
+
+if (!require("doBy")) {
+  install.packages("doBy")
+  library("doBy")
+}
+if (!require("knitr")) {
+  install.packages("knitr")
+  library("knitr")
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library("kableExtra")
+}
+
+
+Netflix2020Depurado <- read_csv("Netflix2020Depurado.csv")
+
+#Dado diversos errores durante la depuración hacemos las siguente modificaciones en "Netflix2020Depurado"
+Netflix2020Depurado$Plataformas <- gsub("\\bam.*eo\\b", "Amazon Prime Video", Netflix2020Depurado$Plataformas, ignore.case = TRUE)
+Netflix2020Depurado$Plataformas <- gsub("\\bOtra\\b", "Otras", Netflix2020Depurado$Plataformas, ignore.case = TRUE)
+
+```
+
+
+### EJERCICIO 1
+
+Cread una función que permita separar las respuestas de la variable `Plataforma` para ver cuál es la plataforma de difusión de contenidos más conocida en la muestra de jóvenes. (1.5 puntos)
+
+```{r warning=FALSE,message=FALSE}
+#Creamos la función
+separador <- function(respuestas, separador) {
+   resultado <- unlist(strsplit(respuestas, separador))
+  return(resultado)
+}
+
+PlataformasSeparadas<- separador(Netflix2020Depurado$Plataformas, ";") #Creamos la nueva variable .
+cat("La plataforma de difusión de contenidos más conocida es:", names(which.max(table(PlataformasSeparadas))))
+```
+
+### EJERCICIO 2
+
+Utilizad la función anterior para generar una nueva variable que permita obtener una tabla de frecuencias (absolutas y relativas) y un diagrama adecuado para la tabla obtenida con dicha variable. (1 punto)
+
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12} 
+#Creamos las tablas a partir del vector "PlataformasSeparadas" creadas con mi función separadora
+TablaFA <- table(PlataformasSeparadas)
+TablaFR <- round(prop.table(TablaFA), 3)
+TablaFR_FA <- cbind(Absolutas = TablaFA, Relativas = TablaFR)
+print(TablaFR_FA)
+
+
+DiagramaPlataformas <- barplot(TablaFA, col = c("cyan","gray","green","blue","red","orange","purple"),   
+                                        main = "Grafico de Barras: Frecuencias Absolutas y Relativas(%)",
+                                        xlab = "Plataformas",
+                                        ylab = "Frecuencia Absoluta",
+                                        ylim = c(0, 350), 
+                                        cex.lab = 1.5, 
+                                        cex.axis = 1.5,
+                                        cex.main = 1.8, 
+                                        cex.names = 0.9)
+
+text(x = DiagramaPlataformas, y = TablaFA, labels = paste(TablaFA, "\n(", TablaFR * 100, "%)", sep = ""),pos = 1, cex = 1.5, col = "black")
+```
+
+
+### EJERCICIO 3
+
+Calculad las **medias individuales** en las dimensiones de Comportamiento, Intención, Beneficios, Actitud, Barreras, Percepción de control, Normas descriptivas y subjetivas. Guardad las nuevas variables en la base de datos. (1 punto)
+
+
+```{r warning=FALSE,message=FALSE}
+Netflix2020Depurado$MediaComportamiento <- rowMeans(Netflix2020Depurado[, c("FrecuenciaNetflix", "RecenciaNetflix")])
+Netflix2020Depurado$MediaIntención <- rowMeans(Netflix2020Depurado[, c("IntencionNetflix1", "IntencionNetflix2")])
+Netflix2020Depurado$MediaBeneficios <- rowMeans(select(Netflix2020Depurado, starts_with("BenefEsp")))
+Netflix2020Depurado$MediaActitud <- rowMeans(Netflix2020Depurado[, c("Actitud1", "Actitud2", "Actitud3")])
+Netflix2020Depurado$MediaBarreras <- rowMeans(select(Netflix2020Depurado, starts_with("Barreras")))
+Netflix2020Depurado$MediaPercepciónDeControl <- rowMeans(Netflix2020Depurado[, c("ControlPerc1", "ControlPerc2")])
+Netflix2020Depurado$MediaNormasDescriptivas <- rowMeans(Netflix2020Depurado[, c("NormaDescriptiva1", "NormaDescriptiva2")])
+Netflix2020Depurado$MediaNormasSubjetivas <- rowMeans(Netflix2020Depurado[, c("NormaSubjetiva1", "NormaSubjetiva2")])
+```
+
+### EJERCICIO 4
+
+Con las nuevas variables calculadas en el apartado anterior, estudiad las posibles diferencias entre hombres y mujeres. Generad una tabla resumen con las medias y desviaciones de grupo en cada dimensión, el valor del estadístico de un contraste adecuado, el valor p y una estimación por intervalo adecuada para cada caso. ($1.5$ puntos)
+
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12}
+# Preparamos los datos para su análisis
+DF_Reducido <- Netflix2020Depurado[, c("Sexo", "MediaComportamiento", "MediaIntención", "MediaBeneficios", "MediaActitud", "MediaBarreras", "MediaPercepciónDeControl", "MediaNormasDescriptivas", "MediaNormasSubjetivas")]
+colnames(DF_Reducido) <- gsub("Media", "", colnames(DF_Reducido))
+Dimensiones <- colnames(DF_Reducido)[2:9]
+DF_Reducido <- DF_Reducido[DF_Reducido$Sexo != "Otro", ]
+
+
+# Verificamos los supuestos antes de aplicar el T.Test
+Resultado_K.S <- lapply(DF_Reducido[, 2:9], ks.test, y = "pnorm") # Para la normalidad
+Resultados_V.T <- lapply(DF_Reducido[, 2:9], function(x) var.test(x ~ DF_Reducido$Sexo)) # Para la varianza
+print(Resultado_K.S)  # Observo que los datos NO provienen de una distribución normal al rechazar la hipótesis nula en todas las dimensiones
+print(Resultados_V.T)  # Compruebo que las varianzas de "Hombres" y "Mujeres" son iguales
+DF_Reducido2L <- pivot_longer(DF_Reducido[,-1],  cols = everything(), names_to = "Dimension", values_to = "Media")
+ggplot(DF_Reducido2L) + #Para ver como se distribuyen
+  geom_density(aes(x = Media), fill = "blue", alpha=0.5) +  
+  facet_wrap(~ Dimension, scales = "free") +
+  theme(strip.text = element_text(size = 26))
+#En este caso, al comprobar que los datos no se distribuyen normalmente, no podemos aplicar una prueba como el t.test y aplicamos una prueba no paramétrica U de Mann-Whitney para dos muestras independientes 
+
+ResultadosAnalisis1 <- data.frame(matrix(NA, nrow = 8, ncol = 8))
+colnames(ResultadosAnalisis1) <- c("MediaHombres", "DTHombres", "MediaMujeres", "DTMujeres", "Estadistico", "p.valor", "LimiteInf", "LimiteSup")
+rownames(ResultadosAnalisis1) <- Dimensiones
+
+for (NombreDeLaDimension in Dimensiones) {
+  Resultado_wilcox <- wilcox.test(DF_Reducido[[NombreDeLaDimension]] ~ DF_Reducido$Sexo, conf.int = TRUE)
+  ResultadosAnalisis1[NombreDeLaDimension, ] <- c(
+    round(mean(DF_Reducido[[NombreDeLaDimension]][DF_Reducido$Sexo == "Hombre"]), 2),
+    round(sd(DF_Reducido[[NombreDeLaDimension]][DF_Reducido$Sexo == "Hombre"]), 2),
+    round(mean(DF_Reducido[[NombreDeLaDimension]][DF_Reducido$Sexo == "Mujer"]), 2),
+    round(sd(DF_Reducido[[NombreDeLaDimension]][DF_Reducido$Sexo == "Mujer"]), 2),
+    round(Resultado_wilcox$statistic, 2),
+    round(Resultado_wilcox$p.value, 3),
+    round(Resultado_wilcox$conf.int[1], 5),
+    round(Resultado_wilcox$conf.int[2], 5)
+    )
+}
+print(ResultadosAnalisis1) 
+```
+
+### EJERCICIO 5
+
+Complementad el análisis anterior con gráficos adecuados que permitan comparar las dimensiones en ambos sexos. (1 punto)
+
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12}
+rm(TablaFA, TablaFR, Resultados_V.T,Resultado_S.T, Resultado_wilcox,NombreDeLaDimension, Resultado_K.S)#Primero de todos limpiamos el entorno de trabajo
+
+DFR_Caja <- pivot_longer(DF_Reducido, cols = -Sexo, names_to = "Dimension", values_to = "Media")
+
+ggplot(DFR_Caja, aes(x = Sexo, y = Media)) +
+  geom_boxplot() +
+  facet_wrap(~Dimension, scales = "free_y", ncol = 4) +
+  labs(title = "Comparación entre Hombres y Mujeres por Dimensión",x = NULL, y = "Puntuaciones") +
+  coord_cartesian(expand = TRUE) +
+  theme_dark() +
+  theme(
+    plot.title = element_text(size = 35, hjust = 0.5),
+    axis.title.y = element_text(size = 25),
+    axis.text.x = element_text(size = 20),
+    axis.text.y = element_text(size = 20),
+    strip.text = element_text(size = 20))
+#Observamos que las medias son muy similares en general y destacamos especialmente la dimensión Intención donde las Mujeres presentan menos variabilidad que los Hombres, a más destacamos que en el caso de percepción de control en hombres e intención en ambos sexos la mediana se encuentra en el valor más alto (6)
+```
+
+
+### EJERCICIO 6
+
+Estudiad todas las posibles correlaciones entre las dimensiones obtenidas en los apartados anteriores con indicadores adecuados. (1 punto)
+
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12}
+#Dado que los datos no siguen una distribución normal usaré la prueba no paramétrica de Spearman, como la prueba no asume relaciones lineales no hacemos ninguna presunción sobre la linealidad o no de los datos
+Spearman <- cor(DF_Reducido[, -1], method = "spearman")
+corrplot(Spearman, method = "color", addCoef.col = "black",tl.col = "black")
+#Aparecen correlaciones fuertes entre Comportamiento e Intención y Actitud y Beneficios, una gran parte de las dimensiones tienen una correlación moderada
+```
+
+### EJERCICIO 7
+
+Complementad el apartado anterior sobre correlaciones con gráficos adecuados. (1 punto)
+
+```{r warning=FALSE,message=FALSE,fig.width=18,fig.height=18}
+scatterplotMatrix(DF_Reducido[2:9],
+                  cex.axis = 2,5,
+                  cex.labels = 2,
+                  col="blue",
+                  regLine = list(col = "pink"),
+                  smooth = list(col.smooth = "orange", col.spread = "orange"),
+                  cex = 1,
+                  pch=20)
+#Para ver en detalle las correlaciones más fuertes
+ggplot(DF_Reducido, aes(x= Comportamiento, y= Intención))+
+  geom_point(size=3)+
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +
+  labs(title = "Comportamiento e Intención",
+       x = "Comportamiento",
+       y = "Intención") +
+  theme_minimal()
+ggplot(DF_Reducido, aes(x= Actitud, y= Beneficios))+
+  geom_point(size=3)+
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +
+  labs(title = "Comportamiento e Intención",
+       x = "Comportamiento",
+       y = "Intención") +
+  theme_minimal()
+```
+
+### EJERCICIO 8
+
+¿Existe relación entre la edad y las dimensiones calculadas respecto al uso de Netflix? Haced uso de indicadores y contrastes adecuados resumiendo los análisis en una tabla. (1 punto)
+
+```{r warning=FALSE,message=FALSE}
+#Preparamos los datos para su analisis
+DF_ReducidoEN <- Netflix2020Depurado[, c("Edad", "MediaComportamiento", "MediaIntención","MediaActitud", "MediaPercepciónDeControl", "MediaNormasDescriptivas", "MediaNormasSubjetivas")]
+colnames(DF_ReducidoEN) <- gsub("Media", "", colnames(DF_ReducidoEN))
+
+#Calculamos las correlaciones 
+CorS <- cor(DF_ReducidoEN,method = "spearman")
+CorK <- cor(DF_ReducidoEN,method = "kendall")
+CorP <- cor(DF_ReducidoEN) #Todo y que no es lo más adecuado al no seguir una distribución normal, calculamos con Pearson igualmente para ver si la diferencias son notorias
+
+TablaM <- summaryBy(. ~ Edad, data = DF_ReducidoEN, FUN = mean)#Calculamos las medias de las dimensiones por años 
+TablaResumen <- t(rbind(TablaM, c("17-25", 
+                                mean(DF_ReducidoEN$Comportamiento),
+                                mean(DF_ReducidoEN$Intención),
+                                mean(DF_ReducidoEN$Actitud),
+                                mean(DF_ReducidoEN$PercepciónDeControl),
+                                mean(DF_ReducidoEN$NormasDescriptivas),
+                                mean(DF_ReducidoEN$NormasSubjetivas))))
+
+TablaResumen <- data.frame(TablaResumen,CorP[1:7,1],CorK[1:7,1],CorS[1:7,1])
+
+colnames(TablaResumen) <- c("M17a", "M18a","M19a","M20a","M21a","M22a","M23a","M24a","M25a","M17-25a","PE","KE","SE" )
+
+TablaResumen <- round(sapply(TablaResumen[-1,], as.numeric), 3)
+
+row.names(TablaResumen)<- c("Comportamiento", "Intencion","Actitud","PercepcionDeControl","NormasDescriptivas", "NormasSubjetivas")
+
+TablaResumen <- kable(TablaResumen, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE, font_size = 14) %>%
+  add_footnote("M=Media; a=años; E=Edad; P=Pearson; K=Kendall; S=Spearman", notation  = "none")
+
+print(TablaResumen)
+#Observamos que no hay relación entre edad y las dimensiones
+```
+
+### EJERCICIO 9
+
+Complementad el ejercicio anterior con representaciones gráficas adecuadas. (1 punto)
+
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12}
+DFReducidoENL <- pivot_longer(DF_ReducidoEN, cols = 2:7)
+
+ggplot(DFReducidoENL, aes(x = Edad, y = value)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +
+  labs(title = "Diagrama de dispersión",
+       x = "Edad",
+       y = "Valor") +
+  facet_wrap(~name, scales = "free_y", ncol = 2)
+```

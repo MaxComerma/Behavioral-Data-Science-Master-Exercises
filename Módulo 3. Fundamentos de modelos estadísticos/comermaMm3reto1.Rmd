@@ -1,0 +1,276 @@
+---
+title: 'Modelos Estadísticos: RETO 1'
+author: MAX COMERMA Y MARTOS (23925480Y)
+output: html_notebook
+---
+'Para una mejor visualización es mejor hacerlo en forma de notebook'
+
+# #  EJERCICIOS 
+# # #  EJERCICIO 1
+
+Analizad a nivel descriptivo (mediante representaciones tabulares y gráficas) y comentad brevemente todas las variables incluidas en la base de datos excepto la variable de registro (*instant*). (1 punto)
+
+```{r warning=FALSE,message=FALSE}
+library(lmtest)
+library(ggplot2)
+library(psych)
+if (!require('RColorBrewer')) {
+  install.packages('RColorBrewer')
+  library('RColorBrewer')
+}
+library(doBy)
+if (!require('cowplot')) {
+  install.packages('cowplot')
+  library('cowplot')
+}
+library(doBy)
+library(car)
+library(effects)
+library(RcmdrMisc)
+library(stats)
+# Cargamos y depuramos
+day <- read.csv('day.csv',header = TRUE)
+day$dteday <- as.Date(day$dteday)
+day$weekday[day$weekday == 0] <- 7
+# Factorizamos las variables categóricas
+for (i in 3:9){
+  day[,i] <- as.factor(day[,i])
+}
+tablas <- function(columna) {
+  tabla <- as.data.frame(table(day[columna]))
+  return(tabla)
+}# Creo una función para hacer las tablas de frecuencia 
+any(is.na(day))# Observo que no hay ningún valor faltante
+# dteday nos indica la fecha de la observación. Año-Mes-Día 
+any(duplicated(day$dteday))# No hay ninguna fecha duplicada
+tablaA <- as.data.frame(table(format(day$dteday, '%Y')))
+colnames(tablaA) <- c('Año','¿Cuántos días están registrados?')
+print(tablaA) # Observo que esta columna representa todos los días de los años 2011 y 2012, siendo este último un año bisiesto.
+# Season es una variable categórica que nos indica la estación de las observaciones.1=invierno, 2=Primavera, 3=Verano , 4=Otoño
+tablaS <- tablas('season')
+rownames(tablaS) <- c('Invierno','Primavera','Verano','Otoño')
+tablaS <- tablaS[order(tablaS$Freq), ]
+tablaS <- tablaS[,-1, drop=FALSE]
+tablaS$Proporción <- round(prop.table(tablaS$Freq), 3)
+colnames(tablaS) <- c('Días por estación','Proporción')
+print(tablaS)# Se observa que hay pocas diferencias en cuanto a los días por estación, siendo verano el que más días tiene y otoño la que menos.
+# Yr es una variable categórica que nos indica el año de las observaciones. 0=2011 y 1=2012
+tablaY <- tablas('yr')
+colnames(tablaY) <- c('Codificación año','Frecuencia')
+print(tablaY)# Coincide con los datos previamente descritos
+# Mnth es una variable categórica que nos indica el mes de las observaciones.De Enero (1) a Diciembre (12)
+tablaM <- tablas('mnth')
+colnames(tablaM) <- c('Mes','Días totales')
+rownames(tablaM) <- c('Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre')
+tablaM <- tablaM[,-1, drop=FALSE]
+print(tablaM)# Coincide con los datos previamente descritos
+# Holiday es una variable categórica que nos indica si el día de la observación era festivo o no. 0=No, 1=Sí
+tablaH <- tablas('holiday')
+colnames(tablaH) <- c('¿Festivo?','Días')
+tablaH$'%' <- round(prop.table(tablaH$'Días'), 3)*100
+print(tablaH)# El 2,9% de las observaciones ocurrieron en un día festivo
+# Weekday es una variable categórica que nos indica el día de la semana.Lunes (1) a domingo (7)
+tablaW <- tablas('weekday')
+rownames(tablaW) <- c('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')
+tablaW <- tablaW[,-1, drop=FALSE]
+print(tablaW)# Observamos una distribución sin variaciones significativas
+# Workingday es una variable categórica que nos indica si el día de la observaciónes es laborable o no. 0=No, 1=Sí
+tablaWd <- tablas('workingday')
+tablaWd$'%' <- round(prop.table(tablaWd$'Freq'),3)*100
+print(tablaWd)# El 31,6% de los días observados fueron no laborables 
+# Weathersit es una variable categórica que nos indica las condiciones meteorológicas del día de la observación.1=Soleado, parcialmente nublado 2=Nublado, niebla, 3=Lluvia/nieve
+tablaWe <- tablas('weathersit')
+rownames(tablaWe) <- c('Soleado, parcialmente nublado','Nublado, niebla','Lluvia/nieve ligera')
+tablaWe <- tablaWe[,-1, drop=FALSE]
+tablaWe$'%' <- round(prop.table(tablaWe$'Freq'),3)*100
+print(tablaWe)# El 97,1% de los días no llovió, ningún día fue categorizado como '4'=Lluvia/nieve fuerte, la mayoría de días fueron soleados o parcialmente nublados 
+layout(mat = matrix(c(1, 2, 3, 4, 5, 6, 7,8), nrow = 2, ncol = 4))
+for (i in 3:9) pie(table(day[i]), main = names(day[i]))# Observamos las distribuciones de las diferentes variables categóricas
+cat('season: 1=invierno, 2=Primavera, 3=Verano , 4=Otoño\n',
+    'yr: 0=2011, 1=2012\n',
+    'mnth: de Enero (1) a Diciembre (12)\n',
+    'holiday: 0=No, 1=Sí\n',
+    'weekday: lunes (1) a domingo (7)\n',
+    'workingday: 0=No, 1=Sí\n',
+    'weathersit: 1=Soleado, parcialmente nublado 2=Nublado, niebla, 3=Lluvia/nieve ligera', sep = '')
+layout(1)
+# Temp, aTemp, hum y windspeed son variables continuas normalizadas que registran la temperatura, temperatura percibida, humedad y velocidad del viento, respectivamente, a lo largo de todos los días registrados
+tablaR <- as.data.frame(round(t(describe(day[, 10:13])),3))
+colnames(tablaR) <- c('Temperatura','Temperatura percibida','Humedad','Velocidad del viento')
+print(tablaR)# Esta tabla es el resumen descriptivo de las diferentes variables continuas normalizadas referentes a las condiciones meteorológicas.
+# Debido a la normalización de los datos, la interpretación de los diversos estadísticos como la media, la mediana, etc... no nos aportan demasiada información sobre las observaciones, es decir, no podemos determinar si la temperatura media de junio, por ejemplo, fue de 29 grados o 32. La media de las variables temperatura y temperatura percibida son cercanas a 0,5, con una desviación estándar baja,agrupando los valores alrededor de la media. La asimetría es ligeramente negativa en temperatura, temperatura percibida y humedad, siendo un poco más intensa en la temperatura percibida. En cuanto la curtosis, las distribuciones son platicúrticas, siendo muy ligera en humedad. Las variables de esta tabla presentan un rango elevado, posiblemente indicando una distribución dispersa. Por último, la velocidad del viento muestra una media, distribución típica y rango más bajo que las otras variables. Destacar que presenta asimetría positiva y curtosis positiva, indicando una distribución sesgada hacia la derecha y siendo leptocúrtica.
+boxplot(day[,10:13],col = brewer.pal(n = 4, name = 'Accent'),main='Diagrama de cajas agrupado')# Observamos bastantes valores atípicos superiores en la velocidad del viento y algunos inferiores en humedad, también observamos unos bigotes amplios respecto al tamaño de la caja mostrando dispersión en los datos
+par(mfrow=c(1, 2))
+for (i in 10:13) {
+  plot(day[, i], main = names(day[i]),col=c('red','blue','green','orange')[i-9],xlab='',ylab='')
+}# Se observa cierto patrón en temperatura y temperatura percibida. En la variable  humedad, los valores se concentran en la mitad superior del gráfico y en velocidad del viento, los valores tienen que ser inferiores a 0,3.
+par(mfrow=c(1, 2))
+for (i in 10:13) {
+  plot(density(day[, i]),main = names(day[i]),xlab='')
+  polygon(density(day[, i]), col = brewer.pal(n = 4, name = 'Pastel2')[i - 9])
+}# Para la temperatura y temperatura percibida, parece que siguen una distribución bimodal, es decir, tienen dos picos distintos en su distribución de frecuencia. En cuanto a la velocidad del viento, su distribución se asemeja a una distribución gamma, beta o logarítmica. Por otro lado, la distribución de la humedad también tiene cierta semejanza con la de la velocidad del viento, pero con una relación inversa en el eje de las abscisas.
+par(mfrow=c(1, 1))
+# La última variable es cnt que es el recuento total de usuarios, el número de bicicletas alquiladas. Nuestra variable a predecir, es discreta. 
+print(as.data.frame(t(round(describe(day$cnt),3))))# La variable presenta una media de aproximadamente 4500 usuarios, siendo el máximo 8714 usuarios y el mínimo 22, el rango es muy amplio, la distribución tiene ligeramente una cola hacia la izquierda y es platicúrtica.  
+cat('CV=', (sd(day$cnt) / mean(day$cnt)) * 100)# Presenta una variabilidad moderada. 
+plot(density(day$cnt),xlab='',main = 'Distribución del recuento  total de usuarios')# No sigue una distribución normal.
+polygon(density(day$cnt), col = 'lightblue')
+boxplot(day$cnt,col='lightblue',main='Diagrama de cajas del recuento total de usuarios')# Se observa una distribución dispersa como en las otras variables y la ausencia de valores atípicos.
+plot(day$cnt,col='blue',ylab='',xlab='')# Se observa cierto patrón en los valores, aunque no muy marcado y tiene cierta similitud con los gráficos de temperatura y temperatura percibida.
+```
+
+# # #  EJERCICIO 2
+
+Ejecutad y comentad brevemente análisis bivariados entre la variable de respuesta (*cnt*) y el resto de variables de la base de datos excepto la variable de registro (*instant*). (1.5 puntos)
+
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12}
+# Como la n>100 entonces aplicaremos pruebas paramétricas. 
+# Primero analizamos si hay diferencias entre el recuento total de usuarios según las variables categóricas 
+summaryBy(cnt~yr,FUN=c(mean,sd,sum),data=day)# Aparecen diferencias en la media diaria entre 2011 y 2012. Hubo 806,473 alquileres de bicicletas adicionales en 2012 en comparación con 2011.
+summaryBy(cnt~season,FUN=c(mean,sd,sum),data=day)# Como era de esperar, en invierno se utilizaron menos bicicletas, mientras que en verano fue la estación con más alquileres
+print(TukeyHSD(aov(cnt ~ season, data = day)))# Se notan diferencias significativas en todas las estaciones, excepto en otoño y primavera.
+summaryBy(cnt~mnth,FUN=c(mean,sd,sum),data=day)# # Los resultados son similares al análisis realizado por estaciones, pero se observa que en mayo y octubre (los dos meses más cercanos al verano) hay un mayor uso de bicicletas que en los meses de la misma estación.
+summaryBy(cnt~holiday,FUN=c(mean,sd,length,sum),data=day)#  # Se observa que en los días festivos hay un menor uso de bicicletas.
+print(summary(aov(cnt ~ holiday, data = day)))#  # No se encuentran diferencias significativas entre las medias, aunque el p.valor es muy cercano a 0,05.
+summaryBy(cnt~weekday,FUN=c(mean,sd),data=day)# La máxima diferencia entre las medias de los diferentes días es de aproximadamente de 403 bicicletas. No se observan variaciones importantes según el día de la semana.
+summaryBy(cnt~workingday,FUN=c(mean,sd,length),data=day)# Se notan diferencias no muy significativas, se usan  de bicicletas en los días laborables, con una diferencia promedio de aproximadamente 256 bicicletas.
+summaryBy(cnt~weathersit,FUN=c(mean,sd,length,sum),data=day)# Como era de esperar, hay más usuarios en condiciones meteorológicas más favorables.
+print(TukeyHSD(aov(cnt ~ weathersit, data = day)))# Se encuentran diferencias significativas entre todas las condiciones meteorológicas.
+par(mfrow=c(2, 2))
+for (i in 3:9) {
+  boxplot(day$cnt ~ day[, i], xlab = colnames(day)[i], ylab = 'Recuento total de usuarios', main = paste('Recuento total de usuarios vs', colnames(day)[i]), col = brewer.pal(n = 7, name = 'Pastel1')[i-2])
+}# Se aprecia que no hay casi valores atípicos, lo que indica homogeneidad en el alquiler de bicicletas de respecto a las diferentes variables categóricas y se confirman las diferencias e igualdades comentadas anteriormente.
+cat('season: 1=Invierno, 2=Primavera, 3=Verano , 4=Otoño\n',
+    'yr: 0=2011, 1=2012\n',
+    'mnth: de Enero (1) a Diciembre (12)\n',
+    'holiday: 0=No, 1=Sí\n',
+    'weekday: lunes (1) a domingo (7)\n',
+    'workingday: 0=No, 1=Sí\n',
+    'weathersit: 1=Soleado, parcialmente nublado 2=Nublado, niebla 3=Lluvia/nieve ligera', sep = '')
+par(mfrow=c(1, 1))
+round(cor(day$cnt, day[, 10:13]),3)# Se observa una correlación positiva moderada con la temperatura y la temperatura percibida, y una correlación negativa débil con la humedad y la velocidad del viento.
+for (i in 10:13) {
+  assign(paste0('p', i), 
+         ggplot(day, aes_string(x = day[,i], y = 'cnt')) +
+           geom_point(size = 3, alpha = 0.7) +
+           geom_smooth(method = 'lm', se = TRUE, color = 'blue') +
+           labs(title = paste('Recuento total de usuarios y', colnames(day)[i]),
+                x = colnames(day)[i], y = 'cnt') +
+           theme_minimal())
+}
+plot_grid(p10,p11,p12,p13)# Se observa hacia dónde pueden dirigirse las relaciones de la variable predictora.
+```
+
+
+# # #  EJERCICIO 3
+
+Dividid la muestra en muestra de entrenamiento ($70\%$) y muestra de test($30\%$), utilizando previamente la instrucción *set.seed(123)*. Llevad a cabo un modelo de regresión múltiple para predecir la variable *cnt* incluyendo únicamente las variables numéricas referidas a las condiciones climáticas. Interpretad sus coeficientes, así como la utilidad global del modelo. Utilizad únicamente la muestra de entrenamiento. (1.5 puntos)
+
+```{r warning=FALSE,message=FALSE}
+set.seed(123)
+train <- sample(1:nrow(day), 0.7 * nrow(day))
+test <- setdiff(1:nrow(day), train)
+m1 <- lm(cnt ~ temp + atemp + hum + windspeed, data = day[train, ])
+summary(m1)# Se observa significancia en todas las variables, excepto en la temperatura. Es posible que haya multicolinealidad entre temperatura y temperatura percibida al estar altamente correlacionadas. Manteniendo constantes las otras variables, se espera que un aumento de una unidad en la temperatura percibida aumente en 14,141.6 el numero de bicletas alquiladas, que un aumento de una unidad en la humedad disminuya en 2,979.5 unidades, y que en la velocidad del viento disminuya en 4,283.4 unidades. Como las variables numéricas están normalizadas y van de 0 a 1, al aumentar una unidad recorre todo el rango, por lo tanto, están perdiendo utilidad estas interpretaciones. El modelo es globalmente significativo y explica un 43.92% de la variabilidad de los casos. Se observa un error estándar de 1421 bicicletas, teniendo en cuenta que la media por día es de 4504.349, las predicciones del primer modelo pueden variar aproximadamente 1/3 de la media.
+Confint(m1)# Solo la temperatura incluye el 0 en su intervalo de confianza
+plot(allEffects(m1))# Para la temperatura percibida y temperatura, en los valores más extremos la sombra proyectada se amplía, y en la velocidad del viento en los valores más altos, por lo tanto, hay menos precisión cuando las temperaturas son significativamente más bajas o altas de la media y la velocidad del viento es más alta de la media. Aunque esta ampliación de la sombra para la velocidad del viento podría ser limitada al no existir demasiadas observaciones en los o valores más altos. 
+```
+
+
+# # #  EJERCICIO 4
+
+Añadid al modelo anterior el predictor categórico *weathersit* e interpretad sus coeficientes interpretando, además, su utilidad global. Utilizad únicamente la muestra de entrenamiento.  (1.5 puntos)
+
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12}
+m2 <- lm(cnt ~ temp + atemp + hum + windspeed + weathersit, data = day[train, ])
+summary(m2)# En este segundo modelo se ha añadido la variable categórica 'weathersit'. Los días soleados o parcialmente nublados y los días con lluvia o nieve ligera fueron significativos, mientras que los días nublados o con niebla no influyeron significativamente en el alquiler de bicicletas. El modelo es globalmente útil y explica el 45.96% de la variabilidad, superando en un 2% al modelo anterior.
+car::Confint(m2)# Como en el modelo 1, las variables no significativas incluyen el 0.
+Anova(m2)# Añadir la variable categórica al modelo aporta utilidad y es la que tiene más nivel de significancia. No hay diferencias significativas en cuanto a los niveles de significancia de las variables cuando la variable categórica se evalúa conjuntamente y cuando no.
+plot(allEffects(m2))# Se observa el efecto de las condiciones meteorológicas sobre el uso de la bicicleta teniendo la tercera condición bastante variabilidad. Más importante aún, se observa que ha aumentado la variabilidad para los valores más alejados de la media en humedad y velocidad del viento, mientras que en temperatura percibida, sin alejarse mucho de la media, ya hay una mayor que en el modelo anterior.
+anova(m1,m2)# El modelo 2 es significativamente mejor que el 1. Aunque sea significativamente superior, no sería el más recomendable debida a la gran variabilidad presentada en las variables 
+```
+
+# # #  EJERCICIO 5
+
+Añadid al modelo de la pregunta anterior el término de interacción windspeed*hum, interpretad los nuevos coeficientes y llevad a cabo algún contraste global asociado al modelo resultante. Utilizad únicamente la muestra de entrenamiento. (1.5 puntos)
+
+```{r warning=FALSE,message=FALSE}
+m3 <- lm(cnt ~ temp + atemp + hum*windspeed + weathersit , data = day[train, ])
+summary(m3)# La nueva variable, la interacción entre humedad y velocidad del viento, no es significativa. Se observan diferencias notables en la significancia de las otras variables. Siendo las unicas variables significativas, los días lluviosos o con nieve ligera y la humedad junto al intercepto. A pesar de esto, el modelo sigue siendo globalmente útil y solo tiene una diferencia del 0.04% en la explicación de la variabilidad de los casos en comparación con el modelo anterior.
+Anova(m3)# Si analizamos la variable categórica de manera conjunta, las diferencias con el modelo anterior son menos notorias, y las variables compartidas con el modelo anterior mantienen un nivel de significancia similar.
+plot(allEffects(m3))# Para temperatura percibida, temperatura y las condiciones metereologicas, los efectos se mantienen muy parecidos al modelo anterior.
+plot(allEffects(m3)$`hum:windspeed`)# A medida que aumenta la velocidad del viento, hay una pendiente más pronunciada. Sin embargo, esta interacción no resulta significativa para el modelo.
+anova(m2,m3)# El modelo 2 es significativamente mejor que el 3.
+```
+
+# # #  EJERCICIO 6
+
+Utilizad el método de *eliminación hacia atrás* para reducir el nivel de complejidad del modelo anterior. Utilizad únicamente la muestra de entrenamiento. (1.5 puntos)
+
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12}
+m3 <- lm(cnt ~ temp + atemp + hum +  hum*windspeed + weathersit , data = day[train, ])
+stepwise(m3, direction='backward', criterion='BIC')
+# El modelo final sería: Recuento total de usuarios = β0 + β1⋅Temperatura percibida + β2⋅Humedad + β3⋅Velocidad del viento + β4⋅Condiciones meteorológicas+ϵ
+```
+
+# # #  EJERCICIO 7
+
+Validad mediante contrastes estadísticos y gráficos los supuestos teóricos del modelo lineal utilizando el modelo obtenido en la pregunta anterior y utilizando únicamente la muestra de entrenamiento. Complementariamente, reportar algún indicador de ajuste para la muestra de test. (1.5 puntos)
+
+```{r warning=FALSE,message=FALSE}
+mf <- lm(cnt ~ atemp + hum + windspeed + weathersit, data = day[train,])
+summary(mf)# La temperatura percibida tiene el mayor impacto en la variable a predecir, por signifcancia y por el estimador. Por otro lado, tanto la humedad como la velocidad del viento tienen un impacto negativo similar. La condición climática, ya sea nublado o con niebla, no parece ser relevante, siendo la única que no es significante. En general, nuestro modelo presenta alguna utilidad, ya que explica el 46.01% de la variabilidad en el recuento total de usuarios. Aunque queda lejos de lo que se aplicaría en el mundo real.
+Anova(mf)# Todas las variables muestran valores de significancia muy cercanos a cero, excepto la humedad. 
+plot(allEffects(mf))# Las relaciones parecen ser lineales y la sombra proyectada no es demasiado amplia.
+```
+
+```{r warning=FALSE,message=FALSE}
+# Realizamos el diagnóstico del modelo final.
+# Linealidad:
+par(mfrow=c(1,2))
+plot(mf,which = c(1,3))# El primer gráfico no muestra una relación lineal , mientras que en el segundo, con los residuos estandarizados, se observa una mayor aproximación a una posible recta lineal.
+resettest(cnt ~ atemp + hum + windspeed + weathersit, power=2:3, type='regressor', data=day[train,])# El hecho de añadir términos polinómicos podría mejorar la linealidad. Sin embargo, no se cumple el supuesto de linealidad.
+crPlots(mf, smooth=list(span=0.5))# Las variables temperatura percibida y humedad son las que más difieren de la linealidad.
+# Normalidad:
+hist(mf$residuals)# Se observa cierta asimetría en la distribución de los residuos.
+plot(mf,which = 2)# Hay desviación en los extremos, indicando que los residuos podrían no seguir una distribución normal.
+shapiro.test(mf$residuals)# El test de Shapiro-Wilk indica que los residuos no siguen una distribución normal.
+# Homogeneidad de varianza del error:
+plot(mf,which=c(1,3))# No se observa que los puntos estén distribuidos de manera aleatoria sobre una línea horizontal, por lo tanto, seguramente no se cumpliría el supuesto.
+bptest(cnt ~ atemp + hum + windspeed + weathersit, varformula = ~ fitted.values(mf), studentize=FALSE, data=day[train,])# La varianza de los errores no es constante a lo largo de los valores ajustados del modelo, por lo que no se cumple el supuesto de homoscedasticidad.
+# Independencia de los residuos:
+acf(mf$residuals)# Solo un valor supera la línea de referencia, en el retardo 19.
+set.seed(123)
+durbinWatsonTest(mf,max.lag=10)
+# Se cumple el supuesto de independencia de los residuos al estar los estadísticos cerca de 2 y los p.valores superiores a 0,05, por lo que el procedimiento de mínimos cuadrados es correcto.
+vif(mf)# Hay una multicolinealidad baja, lo que no supone un problema.
+# Valores extremos:
+influenceIndexPlot(mf, id=list(method='y', n=10), vars=c('hat'))# Se observan unos cuantos valores 'extremos' en cuanto al ajuste.
+influenceIndexPlot(mf, id=list(method='y', n=3), vars=c('Cook'))# La observación 69 presenta bastante más influencia que las demás.
+print(4/length(train))
+influencePlot(mf, id=list(method='noteworthy', n=3))# Hay unos cuantos valores que son influyentes. En el gráfico se observan distintas observaciones que pueden ser extremas. A pesar de esto, no hay observaciones que presenten conjuntamente mucho apalancamiento, mucha influencia ni mucho residuo estudentizado a la vez. Se destaca por encima de las demás la observación 69, que presenta 0.00 como valor de la humedad, lo que probablemente la hace influyente.
+# Ponemos a prueba el modelo:
+predicciones <- predict(mf, newdata = day[test, ])
+mean((day[test,'cnt']-predicciones)^2)# El error cuadrático medio del modelo es alto, lo que indica que las predicciones están  alejadas de los valores reales. Dado que el modelo no cumple la mayoría de los supuestos de regresión lineal, es poco probable que sea el mejor modelo para estos datos y por esto la exactitud del modelo es muy limitada.
+sqrt(mean((day[test,'cnt']-predicciones)^2))#De media hay un error de aproximadamente 1419 bicicletas en general
+#Como extra realizaremos algunos ajustes 
+#Primero eliminamos los outliers 
+day2 <- day
+boxplot_ws <- boxplot.stats(day2$windspeed)$out
+boxplot_hum <- boxplot.stats(day2$hum)$out
+day2 <- subset(day2, !(windspeed %in% boxplot_ws))
+day2 <- subset(day2, !(hum %in% boxplot_hum))
+set.seed(123)
+train2 <- sample(1:nrow(day2), 0.7 * nrow(day2))
+test2 <- setdiff(1:nrow(day2), train2)
+#Hacemos algunas variables polinómicas
+mf2<- lm(cnt ~ poly(atemp,3,raw=TRUE) + poly(hum,3,raw=TRUE) + windspeed + weathersit, data = day2[train,])
+summary(mf2)#Mejora a 0,57 el R^2, pero la categoría condiciones climatológicas deja de tener importancia, consideramos quitar la variable
+mf3<- lm(cnt ~ poly(atemp,3,raw=TRUE) + poly(hum,3,raw=TRUE) + windspeed , data = day2[train,])
+anova(mf3,mf2)#El modelo sin la variable weathersit es 'mejor' 
+predicciones2 <- predict(mf3, newdata = day2[test2, ])
+mean((day2[test2,'cnt']-predicciones2)^2)#Se reduce considerablemente el MSE, pero no lo suficiente
+sqrt(mean((day2[test2,'cnt']-predicciones2)^2))#Se reduce en aproximadamente 153 bicicletas la media de los errores en general respecto al modelo anterior
+```
+
+

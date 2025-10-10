@@ -1,0 +1,652 @@
+---
+title: "Modelos Estadísticos: RETO 2"
+author: grupo6reto2 - MARIA BARRAZA, MAX COMERMA, ROSALÍA GIMÉNEZ
+output: html_notebook
+---
+## EJERCICIOS
+
+### EJERCICIO 1
+
+Analizad a nivel descriptivo (mediante representaciones tabulares y gráficas) y comentad brevemente todas las variables incluidas en la base de datos excepto la variable de registro (*id*}). (1 punto)
+
+```{r warning=FALSE,message=FALSE}
+# CARGA PAQUETES PARA DEPURAR BBDD Y FUNCIONES AUXILIARES
+pkgs2use<- c('tidyverse','readxl')
+
+inst.load.pkg <- function(pkg){
+  if (!require(pkg, character.only = TRUE)) {
+	install.packages(pkg, dependencies = TRUE)
+	library(pkg, character.only = TRUE)
+  }
+}
+invisible(lapply(pkgs2use,inst.load.pkg))
+rm(pkgs2use,inst.load.pkg)
+
+if(!require(e1071)){install.packages('e1071')
+  library(e1071)
+}
+
+if(!require(DescTools)){install.packages('DescTools')
+  library(DescTools)
+}
+
+if(!require(forcats)){install.packages('forcats')
+  library(forcats)
+}
+if(!require(HistData)){install.packages('HistData')
+  library(HistData)
+}
+
+if(!require(psych)){install.packages('pysch')
+  library(psych)
+}
+
+if(!require(ggplot2)){install.packages('ggplot2')
+  library(ggplot2)
+}
+
+if(!require(patchwork)){install.packages('patchwork')
+  library(patchwork)
+}
+
+if(!require(RcmdrMisc)){install.packages('RcmdrMisc')
+library(RcmdrMisc)
+}
+
+if(!require(leaps)){install.packages('leaps')
+library(leaps)
+}
+
+if(!require(pscl)){install.packages('pscl')
+library(pscl)
+}
+
+if(!require(MASS)){install.packages('MASS')
+library(MASS)
+}
+
+
+if(!require(ROCR)){install.packages('ROCR')
+library(ROCR)
+}
+
+if(!require(summarytools)){install.packages('summarytools')
+  library(summarytools)
+}
+
+if(!require(pls)){install.packages('pls')
+  library(pls)
+}
+
+train<- read.csv("train.csv",stringsAsFactors = TRUE)
+train<- train[,3:25]
+train<- na.omit(train)
+```
+
+Las Variables categóricas están marcadas en la tabla con un asterisco. Son 5
+Gender: Género del usuario. Valores : "Male","Female"
+Customer.Type: Clasificación del tipo de usuario. Valores: "Loyal Customer", "disloyal Customer",  
+Type.Travel: Tipo de viaje. Valores: "Personal Travel", "Business travel",
+Class: Classificación del billete: "Eco","Eco Plus", "Business"
+Satisfaction: Valoración de la satisfacción general. Valores: "#neutral or dissatisfied", "satisfied"
+
+Variables numéricas. Son 18
+Las variables relacionadas con la satisfacción, son ordinales, y las demás son discretas, aunque en su naturaleza son continuas
+Age: Edad del usuario. Describe al usuario.
+Flight.Distance: Distancia entre los destinos. Describe el viaje.
+Variables numéricas discretas que recogen la satisfacción del usuario, en escala de 0 a 5, para distintos aspectos del viaje:
+Sat.wifi: Satisfacción con la Calidad de la WiFi
+Sat.Deparr: Satisfacción con el cumplimiento de los tiempos de salida y de llegada
+Sat.onlineBooking: Satisfacción con la reserva online
+Sat.Gate: Satisfacción con la localización de la puerta de embarque
+Sat.Food: Satisfacción con la comida y la bebida
+Sat.OnlineBoarding: Satisfacción con el servicio de embarque online
+Sat.Seat: Satisfacción con la comodidad del asiento
+Sat.Entertainment: Satisfacción con el entretenimiento en el vuelo
+Sat.OnboardPers: Satisfacción con el personal de abordo
+Sat.LegRoom: Satisfacción con el espacio entre las piernas. Puede ser redundante con la Sat.Seat.
+Sat.Baggage: Satisfacción con la manipulación del equipaje
+Sat.CheckIn: Satisfacción con el Check-In
+Sat.InflightServ: Satisfacción con la asistencia en el vuelo. Puede ser redundante con la Sat.OnboardPers
+Sat.Cleanliness: Satisfacción con la limpieza
+Dep.Delay: Minutos de retraso en la salida
+Arr.Delay: Minutos de retraso en la llegada
+
+```{r}
+if(!require(summarytools)){install.packages('summarytools')
+  library(summarytools)
+}
+
+#Creamos la tabla descriptiva para las variables numéricas
+variables_numericas <- sapply(train, is.numeric)
+datos_numericos <- train[, variables_numericas]
+#Train.Des<-as.numeric(t(round(describe(datos_numericos),3)))
+Train.Des<-round(describe(datos_numericos),3)
+t(Train.Des)
+
+```
+#Respecto a las variables de Satisfacción:
+#Todas las medias son superiores a 2.5, ninguna variable "suspende" de manera llamativa.
+#La variable con la media más baja es la el wifi y el onlinebooking.
+#La media más alta es la de satisfacción con el equipaje y la atención del servicio durante el vuelo.
+#Las desviaciones estandar están todas entre 1,18 y 1,53
+
+```{r}
+par(mfrow=c(1,2))
+hist(train$Age,col='lightblue')
+plot(density(train$Flight.Distance))
+polygon(density(train$Flight.Distance), col = "lightblue")
+for (col in colnames(datos_numericos)[3:16]) {
+  barplot(table(datos_numericos[[col]]), main = col, xlab = col, col = "lightblue", border = "black")
+}
+hist(train$Dep.delay, main = "Retraso en la Salida", breaks= 100, ylab=" Frecuencia", xlab= "Minutos",   col = "lightblue", border = "black")
+hist(train$Arr.delay, main = "Retraso en la Llegada", breaks= 100, ylab=" Frecuencia", xlab= "Minutos",   col = "lightblue", border = "black")
+#Observamos que la mayoría de retrasos se concentran en los primeros minutos
+```
+
+
+
+
+```{r}
+# Representamos tablas y gráficos de las variables categóricas
+#Gender: Género del usuario. Valores : "Male","Female"
+#Customer.Type: Clasificación del tipo de usuario. Valores: "Loyal Customer", "disloyal Customer",
+#Type.Travel: Tipo de viaje. Valores: "Personal Travel", "Business travel",
+#Class: Clasificación del billete: "Eco","Eco Plus", "Business"
+#Satisfaction: Valoración de la satisfacción general. Valores: "#neutral or dissatisfied", "satisfied"
+# Variable Género
+tab.Data <- with(train,table(Gender))
+prob.tab <- tab.Data/sum(tab.Data)
+tabla.res <- cbind(Absolutas=tab.Data,Relativas=round(prob.tab,2))
+rownames(tabla.res) <- c('Mujeres','Hombres')
+moda <- names(tab.Data)[tab.Data==max(tab.Data)]
+moda
+grafica<-t(tabla.res)
+print(grafica)
+barplot(grafica, main="Género",  ylab="Frecuencia", col="lightblue" )
+pie(tabla.res, main="Género", labels=names(tabla.res[,1]))
+#La proporción de hombres y mujer es mas o menos la misma, con  solo un 2% mas de mujeres
+
+```
+
+
+
+
+```{r}
+# Variable Tipo de Cliente
+tab.Data <- with(train,table(Customer.Type))
+prob.tab <- tab.Data/sum(tab.Data)
+tabla.res <- cbind(Absolutas=tab.Data,Relativas=round(prob.tab,2))
+rownames(tabla.res) <- c('Cliente Desleal','Cliente Leal')
+moda <- names(tab.Data)[tab.Data==max(tab.Data)]
+moda
+grafica<-t(tabla.res)
+print(grafica)
+barplot(grafica, main="Tipo de Cliente",  ylab="Frecuencia", col="orange" )
+pie(tabla.res, main="Tipo de Cliente", labels=names(tabla.res[,1]))
+#La proporción de clientes leales es el 82% frente sólo al 18% de clientes desleales
+```
+
+
+
+
+```{r}
+# Variable Tipo de Viaje
+tab.Data <- with(train,table(Type.Travel))
+prob.tab <- tab.Data/sum(tab.Data)
+tabla.res <- cbind(Absolutas=tab.Data,Relativas=round(prob.tab,2))
+rownames(tabla.res) <- c('Viaje de negocios', 'Viaje Personal')
+moda <- names(tab.Data)[tab.Data==max(tab.Data)]
+moda
+grafica<-t(tabla.res)
+print(grafica)
+barplot(grafica, main="Tipo de viaje",  ylab="Frecuencia", col="lightyellow" )
+pie(tabla.res, main="Tipo de viaje", labels=names(tabla.res[,1]))
+#Los viajes de negocio son el 69%, una frecuencia más alta frente al 31% de los viajes personales. 
+```
+
+
+
+```{r}
+# Variable Clase de vuelo
+tab.Data <- with(train,table(Class))
+prob.tab <- tab.Data/sum(tab.Data)
+tabla.res <- cbind(Absolutas=tab.Data,Relativas=round(prob.tab,2))
+rownames(tabla.res) <- c('Eco', 'Eco Plus', 'Business')
+moda <- names(tab.Data)[tab.Data==max(tab.Data)]
+moda
+grafica<-t(tabla.res)
+print(grafica)
+barplot(grafica, main="Clase de vuelo",  ylab="Frecuencia", col="lightgreen" )
+pie(tabla.res, main="Clase de vuelo", labels=names(tabla.res[,1]))
+#Los viajes Eco y Eco Plus conforman la mayoría de la muestra, con un 48% de Eco y un 45% Eco Plus
+```
+
+
+```{r}
+# Variable Satisfacción general
+tab.Data <- with(train,table(Satisfaction))
+prob.tab <- tab.Data/sum(tab.Data)
+tabla.res <- cbind(Absolutas=tab.Data,Relativas=round(prob.tab,2))
+rownames(tabla.res) <- c('Neutral o insatisfecho','satisfecho')
+moda <- names(tab.Data)[tab.Data==max(tab.Data)]
+moda
+odds <- tab.Data/(sum(tab.Data)-tab.Data)
+odds#Mirar como interpretar
+grafica<-t(tabla.res)
+print(grafica)
+barplot(grafica, main="Satisfacción General",  ylab="Frecuencia", col="lightblue" )
+pie(tabla.res, main="Satisfacción General", labels=names(tabla.res[,1]))
+#La satisfacción general es en la muestra en un 57% Neutral o insatisfecho y en un 43% Satisfecho
+```
+
+
+
+
+### EJERCICIO 2
+#analisis Bivariado#
+#var: Satisfaction
+
+2.- Ejecutad y comentad brevemente análisis bivariados entre la variable de respuesta (Satisfaction) y el resto de variables de la base de datos excepto la variable de registro (id). (1 punto)
+```{r warning=FALSE,message=FALSE}
+
+#variables categoricas: Gender, CustomerType, TypeTravel, Class
+#Gender
+tabla_sat_gender <- with(train,table(Gender, Satisfaction))
+print(tabla_sat_gender)
+pearsonChi <- chisq.test(tabla_sat_gender)$statistic
+cramerV <- sqrt(pearsonChi/(sum(tabla_sat_gender)*
+            	(min(dim(tabla_sat_gender))-1)))
+names(cramerV) <-NULL
+cat(paste('Ji-cuadrado=',round(pearsonChi,2),
+      	'y V de Cramér=',round(cramerV,2)))
+
+#Aunque parece haber diferencias en satisfacción según el género, la diferencia en proporción parece ser pequeña     	 
+ 
+```
+
+```{r warning=FALSE,message=FALSE}
+#Customer Type
+tabla_sat_cust <- with(train,table(Customer.Type, Satisfaction))
+print(tabla_sat_cust)
+
+pearsonChi <- chisq.test(tabla_sat_cust)$statistic
+cramerV <- sqrt(pearsonChi/(sum(tabla_sat_cust)*
+            	(min(dim(tabla_sat_cust))-1)))
+names(cramerV) <-NULL
+cat(paste('Ji-cuadrado=',round(pearsonChi,2),
+      	'y V de Cramér=',round(cramerV,2)))
+    #Parece haber una proporción más grande de clientes leales que están satisfechos comparado con clientes desleales. Sin embargo, la asociación parece no ser muy fuerte. 	 
+```
+
+```{r warning=FALSE,message=FALSE}
+#Type Travel
+tabla_sat_type <- with(train,table(Type.Travel, Satisfaction))
+print(tabla_sat_type)
+
+pearsonChi <- chisq.test(tabla_sat_type)$statistic
+cramerV <- sqrt(pearsonChi/(sum(tabla_sat_type)*
+            	(min(dim(tabla_sat_type))-1)))
+names(cramerV) <-NULL
+cat(paste('Ji-cuadrado=',round(pearsonChi,2),
+      	'y V de Cramér=',round(cramerV,2)))
+#Parece ser que hay una relación entre tipo de viaje y satisfacción, aunque es una asociación moderada. La proporción de viajes por trabajo resulta en mayor proporción de satisfacción. 
+```
+
+```{r warning=FALSE,message=FALSE}
+#Type class
+tabla_sat_class <- with(train,table(Class, Satisfaction))
+print(tabla_sat_class)
+
+pearsonChi <- chisq.test(tabla_sat_class)$statistic
+cramerV <- sqrt(pearsonChi/(sum(tabla_sat_class)*
+            	(min(dim(tabla_sat_class))-1)))
+names(cramerV) <-NULL
+cat(paste('Ji-cuadrado=',round(pearsonChi,2),
+      	'y V de Cramér=',round(cramerV,2)))
+  #Parece haber una asociación fuerte entre el tipo de clase de viajero, y la satisfacción. Los viajeros en business tienen significativamente mayor proporción de satisfacción que aquellos en eco o en eco plus   	 
+```
+
+```{r warning=FALSE,message=FALSE}
+##Variables númericas continuas
+
+#Arr.delay & Satisfaction
+t.test(Arr.delay~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Arr.delay~Satisfaction,data=train)
+#Hay una diferencia significativa entre la media de minutos de retraso de llegada y la variable de satisfacción. La media de los pasajeros neutrales o insatisfechos es -17.13 - es significativamente mayor que la de los pasajeros satisfechos 12.63.
+```
+
+```{r}
+#Dep.delay t test
+t.test(Dep.delay~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Dep.delay~Satisfaction,data=train)
+#Hay una diferencia significativa entre la media de minutos de retraso  de salida y la variable de satisfacción. La media de los pasajeros neutrales o insatisfechos es -16.43 - es significativamente mayor que la de los pasajeros satisfechos 12.54
+```
+
+```{r}
+
+#Flight Distance t test
+t.test(Flight.Distance~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Flight.Distance~Satisfaction,data=train)
+#Hay una diferencia significativa entre la media de distancia de vuelo y la variable de satisfacción. Los pasajeros en vuelos más cortos, están en promedio más insatisfechos que los pasajeros en vuelos más largos. 
+```
+
+```{r}
+#Age t test
+t.test(Age~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Age~Satisfaction,data=train)
+#Hay una diferencia significativa entre la edad y la variable de satisfacción. Los pasajeros más jóvenes, están en promedio más insatisfechos que los pasajeros con mayor edad. 
+```
+
+```{r}
+#SAT wifi
+t.test(Sat.wifi~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.wifi~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están en significativamente en promedio menos satisfechos con el wifi que los pasajeros satisfechos con el wifi
+```
+
+```{r}
+#SAT DepArr
+t.test(Sat.DepArr~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.DepArr~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están en significativamente en promedio más satisfechos con la salida y llegada que los pasajeros satisfechos.
+```
+
+```{r}
+#SAT Online Booking
+t.test(Sat.onlineBooking~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.onlineBooking~Satisfaction,data=train)
+##Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos  con la reserva online, que los pasajeros satisfechos.
+```
+
+```{r}
+#Satisfacción con la sala de espera
+t.test(Sat.Gate~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.Gate~Satisfaction,data=train)
+#No hay una diferencia de medias significativa entre el grupo de neutrales o no satisfechos y el nivel de satisfacción de la sala de espera. 
+```
+
+
+```{r}
+#SAT Food
+t.test(Sat.Food~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.Food~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos  con la comida,  que los pasajeros satisfechos.
+```
+
+
+```{r}
+#SAT Online Boarding - Facturación online 
+t.test(Sat.OnlineBoarding~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.OnlineBoarding~Satisfaction,data=train)
+##Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos  con la facturación online,  que los pasajeros satisfechos.
+```
+
+```{r}
+#SAT Seat - asiento
+t.test(Sat.Seat~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.Seat~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos  con su asiento,  que los pasajeros satisfechos.
+```
+
+```{r}
+#SAT Entertainment - entretenimiento 
+t.test(Sat.Entertainment~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.Entertainment~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos  con el entretenimiento, que los pasajeros satisfechos.
+```
+
+```{r}
+#SAT Onboardper - personal abordo
+t.test(Sat.OnboardPers~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.OnboardPers~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos con el personal abordo que los pasajeros satisfechos.
+```
+
+```{r}
+#SAT LegRoom - espacio asientos piernas
+t.test(Sat.LegRoom~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.LegRoom~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos  con el espacio de los asientos para las piernas, que los pasajeros satisfechos.
+```
+
+```{r}
+#SAT Baggage - Equipaje
+t.test(Sat.Baggage~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.Baggage~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos con la gestión del equipaje, que los pasajeros satisfechos.
+```
+
+```{r}
+#SAT Checkin
+t.test(Sat.CheckIn~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.CheckIn~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos con el check in, que los pasajeros satisfechos.
+```
+
+```{r}
+#SAT InflightServ - Servicio abordo
+t.test(Sat.InflightServ~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.InflightServ~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos con el servicio abordo , que los pasajeros satisfechos.
+```
+
+```{r}
+#SAT Cleanliness
+t.test(Sat.Cleanliness~Satisfaction,data=train,var.equal=TRUE)
+boxplot(Sat.Cleanliness~Satisfaction,data=train)
+#Los pasajeros neutrales o no satisfechos, están significativamente menos satisfechos  con la limpieza, que los pasajeros satisfechos.
+```
+
+
+
+### EJERCICIO 3
+3. Llevad a cabo el ajuste de un modelo de regresión logística para clasificar a los individuos de acuerdo a la variable *Satisfaction*, utilizando la muestra de entrenamiento. Podéis utilizar términos no lineales como polinomios e interacciones para mejorar el ajuste. Justificad y explicad el modelo final al que se llega con este procedimiento. (2 puntos)
+
+
+```{r warning=FALSE,message=FALSE}
+#
+mod_1 <- glm(Satisfaction~.,train,family=binomial)
+summary(mod_1)#Todas las variables menos la distancia del vuelo son significativas para el modelo
+
+```
+
+Vamos a visualizar los efectos
+
+```{r fig.width=10,fig.height=10}
+library(effects)
+all_effects <- allEffects(mod_1)
+
+# Iterar sobre cada efecto y graficarlo por separado
+for (i in names(all_effects)) {
+  plot(all_effects[i])
+}
+```
+
+Vemos que la variable Fligth.Distance afecta muy poco a la satisfacción.
+Eliminamos la variable Flight.Distance por considerarla no significativa y el modelo mantiene su validez , AIC: 69218
+
+```{r}
+mod_2 <- update(mod_1,.~.-Flight.Distance)
+summary(mod_2)
+```
+
+```{r}
+
+# Vamos a usar el método step para continuar con la selección de variables
+step_model <- step(mod_2, direction= 'both', trace=FALSE, criterion='BIC')
+
+# Ver el modelo final seleccionado, se mantiene el AIC: 69218, luego conservaremos el modelo mod_2
+summary(step_model)
+
+```
+
+Vamos a realizar contrastes globales: Tests basado en la razón de verosimilitudes y de Wald
+
+```{r  echo=FALSE,warning=FALSE,message=FALSE}
+Anova(mod_2,"LR",type='II')
+```
+
+```{r  echo=FALSE,warning=FALSE,message=FALSE}
+Anova(mod_2,"Wald",type='II')
+```
+
+En ambos tests concluiríamos que todos los predictores son de utilidad para clasificar el resultado en la satisfacción .
+
+
+## Test de devianza para comparar modelos anidados  entre el mod_1 y el mod_2 (sin Flight. Distance)
+
+```{r  echo=FALSE,warning=FALSE,message=FALSE}
+anova(mod_1, mod_2, test="Chisq")
+```
+Vemos que no hay diferencia significativa, ambos modelos son prácticamente idénticos. Volvemos a seguir con el análisis con el mod_1 completo
+
+## Multicolinealidad
+
+```{r  echo=FALSE,warning=FALSE,message=FALSE}
+vif(mod_1)#Observamos que los retrasos presentan problemas de multicolinealidad
+
+```
+
+
+## Valores de Pseudo-R2
+
+```{r  echo=FALSE,warning=FALSE,message=FALSE}
+PseudoR2(mod_1,which='all')[c(1,3)]
+PseudoR2(mod_1,which='all')[c(4,8)]
+```
+Podríamos decir que un 68% de la satisfacción quedaría explicada por el modelo
+
+
+## Influencia
+
+```{r  echo=FALSE,warning=FALSE,message=FALSE}
+influenceIndexPlot(mod_1,id.n=2)
+```
+
+No existen un número elevado de valores anómalos que estén afectando al modelo
+
+# Verifica la distribución de clases en las etiquetas
+#table(train$Satisfaction)
+```{r  echo=FALSE,warning=FALSE,message=FALSE}
+#Dado que las variables de retraso en la salida y llegada, así como la distancia del vuelo, no siguen una distribución normal, con una cola pronunciada hacia la izquierda, agregaremos términos polinómicos y haremos dos modelos, uno de segundo grado y otro de tercero. Compararemos los dos modelos. También exploraremos términos de interacción entre variables relacionadas, como el tipo de viajero y la modalidad del viaje, el género y la satisfacción con el servicio y la clase con la satisfacción del asiento, en cuanto al género esta variable debe interaccionar con muchas otras variables, pero no queremos sobrecargar el modelo.
+m2 <- glm(Satisfaction ~ Gender + Customer.Type + Age + Type.Travel + Class + Sat.wifi + Sat.DepArr + 		 
+ 		 Sat.onlineBooking + Sat.Gate + Sat.Food +  Sat.OnlineBoarding + Sat.Seat + Sat.Entertainment +           		 Sat.OnboardPers + Sat.LegRoom + Sat.Baggage + Sat.CheckIn + Sat.InflightServ + Sat.Cleanliness +         		 poly(Dep.delay, 2, raw = TRUE) + poly(Arr.delay, 2, raw = TRUE) + poly(Flight.Distance, 2, raw = TRUE) +
+ 		 Class*Sat.Seat+ Gender*Sat.InflightServ+ Customer.Type*Type.Travel, data = train, family = binomial)
+m3 <- glm(Satisfaction ~ Gender + Customer.Type + Age + Type.Travel + Class + Sat.wifi + Sat.DepArr + 		 
+ 		 Sat.onlineBooking + Sat.Gate + Sat.Food +  Sat.OnlineBoarding + Sat.Seat + Sat.Entertainment +           		 Sat.OnboardPers + Sat.LegRoom + Sat.Baggage + Sat.CheckIn + Sat.InflightServ + Sat.Cleanliness +         		 poly(Dep.delay, 3, raw = TRUE) + poly(Arr.delay, 3, raw = TRUE) + poly(Flight.Distance, 3, raw = TRUE) +
+ 		 Class*Sat.Seat+ Gender*Sat.InflightServ+ Customer.Type*Type.Travel, data = train, family = binomial)
+#Usamos el procedimiento de paso a paso híbrido.
+m2 <- step(m2, direction= 'both', trace=0, criterion='BIC')
+m3 <- step(m3, direction= 'both', trace=0, criterion='BIC')
+anova(m2, m3, test="Chisq")#Comprobamos que el modelo con los polinomios de tercer grado es significativamente mejor que el de los de segundo grado.
+anova(mod_1, m3, test="Chisq")#Comprobamos que el modelo con los polinomios de tercer grado es significativamente mejor.     
+vif(m3)#Algunas de las variables con términos polinómicos o las que presentan interacciones tienen problemas de multicolinealidad al tener un VIF superior a 10 y en algunos casos a 5. Específicamente son las variables, tipo de viaje, los retrasos tanto de llegada y salida, el género, la interacción género con satisfacción con la asistencia en el vuelo y tipo de viaje con tipo de cliente. Sería recomendable realizar algún tipo de transformación.
+Anova(m3,"LR",type='II')#Se observan como era de esperar diferencias en todas las variables que han interacionado o hemos hecho polinómicas en el modelo, especialmente en Clase donde toma un valor de LR chisq de 923080
+PseudoR2(m3,which='all')[c(1,3)]
+PseudoR2(m3,which='all')[c(4,8)] #No mejora demasiado en comparación con el mod_1 en cuanto a la explicación de la variancia.
+#Todo y encontrar diferencias significativas entre los dos modelos, debido a la multicolinealidad, a la influencia extrema de la variable clase, al no tener mejoras por encima del 1% en cuanto a la explicación de variabilidad, consideramos que debido a la alta complejidad del nuevo modelo, quizás no es el más indicado para proceder
+```
+
+
+### EJERCICIO 4
+
+Llevad a cabo el ajuste de un modelo de clasificación basado en análisis discriminante para clasificar a los individuos de acuerdo a la variable *Satisfaction*, utilizando la muestra de entrenamiento. Justificad y explicad el modelo final al que se llega con este procedimiento. (2 puntos)
+ 
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12}
+mAD <- lda(Satisfaction ~ ., data=train)
+mAD#La probabilidad a priori de estar neutral o insatisfecho es aproximadamente un 13.3% mayor que la probabilidad de estar satisfecho.
+Comp.medias <- as.data.frame(t(round(mAD$means, 3)))
+Comp.co <- as.data.frame(round(mAD$scaling,3))
+Comp.co <- arrange(Comp.co, desc(LD1))
+Comp.co#En esta tabla, observamos los coeficientes de las variables del modelo ordenados de mayor a menor. Los valores positivos indican que variables como el tipo de cliente leal, y la satisfacción con el servicio de embarque online o con el wifi tienen una asociación positiva con la satisfacción general del cliente. Por otro lado, los valores negativos indican que variables como si el propósito del viaje es personal, el tipo de cliente desleal, y pertenecer a las clases Eco o Eco Plus tienen una asociación negativa con la satisfacción del cliente.
+plot(mAD)#Observamos que con el modelo entrenado, no están perfectamente separadas las dos distribuciones, hay solapamiento los que indica que hay falsos negativos y positivos.
+
+
+
+
+```
+
+### EJERCICIO 5
+5. Llevad a cabo el ajuste de un modelo de clasificación basado en Naive Bayes para clasificar a los individuos de acuerdo a la variable Satisfaction, utilizando la muestra de entrenamiento. Justificad y explicad el modelo final al que se llega con este procedimiento. (2 puntos)
+```{r warning=FALSE,message=FALSE}
+modelo <- naiveBayes(Satisfaction~.,train)
+modelo
+#Como ya sabemos la distribucioon apriori es 43% de satisfecho y 57% neutral o disatisfecho. Despues vemos las probabilidades condicionales par asignar el modelo de clasificación - en algunos casos muy marcadas como en el caso de ser clientes leales - con una probabilidad condicionada del 90% de estar satisfecho, frente a un 10% de ser clientes desleales. 
+#En el siguiente ejercicio veremos que tan bien clasifica el modelo las variables
+```
+### EJERCICIO 6
+
+Comparad y discutid los anteriores modelos a los que habéis llegado a propósito de algunos indicadores de ajuste/rendimiento vistos en el módulo. (2 puntos)
+
+
+```{r warning=FALSE,message=FALSE,fig.width=12,fig.height=12}
+test<- read.csv("test.csv",stringsAsFactors = TRUE)
+test<- test[,3:25]
+test<- na.omit(test)
+rendimiento <- function(tabla){
+  Se <- tabla[1,1]/colSums(tabla)[1]
+  Es <- tabla[2,2]/colSums(tabla)[2]
+  Fo <- 1-Es
+  Ex <- sum(diag(tabla))/sum(tabla)
+  Pr <- tabla[1,1]/rowSums(tabla)[1]
+  F1 <- psych::harmonic.mean(c(Se,Pr))
+  rend <- c(Se,Es,Fo,Ex,Pr,F1)
+  names(rend) <- c('Sensibilidad','Especificidad','Fall out','Exactitud','Precisión','F1')
+  rend
+}
+```
+
+
+
+```{r}
+#Primero compararemos los dos modelos de regresión logística
+val.pred3 <- ifelse(predict(m3,type="response",test)>=0.5,1,0)
+CONFMAT.rl3 <- table(val.pred3,test$Satisfaction)[2:1,2:1]
+val.pred <- ifelse(predict(mod_1,type="response",test)>=0.5,1,0)
+CONFMAT.rl <- table(val.pred,test$Satisfaction)[2:1,2:1]
+R.RL <- as.data.frame(cbind(rendimiento(CONFMAT.rl3),rendimiento(CONFMAT.rl)))
+colnames(R.RL)  <- c('mod_1','m3')
+R.RL$'dif(m3-mod_1)' <- R.RL$m3 -R.RL$mod_1
+R.RL#No se observan diferencias pronunciadas entre los dos modelos, en este caso nos quedaremos con el modelo más simple como previamente intuíamos
+#Realizaremos también una comparación entre un modelo cuadrático y lineal para el análisis discriminante
+QDA <- qda(Satisfaction ~ .,data= train)
+lda.clase <- predict(mAD,test)$class
+CONFMAT.lda <- table(lda.clase,test[,'Satisfaction'])[2:1,2:1]
+qda.clase <- predict(QDA,test)$class
+CONFMAT.qda <- table(qda.clase,test[,'Satisfaction'])[2:1,2:1]
+R.AD <- as.data.frame(cbind(rendimiento(CONFMAT.lda),rendimiento(CONFMAT.qda)))
+colnames(R.AD)  <- c('L','Q')
+R.AD$'dif(Q-L)' <- R.AD$L -R.AD$Q
+R.AD#El modelo lineal es algo mejor que el cuadrático
+```
+
+```{r}
+#Comparamos todos los modelos
+NB.clase <- predict(modelo,test)
+CONFMAT.NB <- table(NB.clase,test[,'Satisfaction'])[2:1,2:1]
+CRendimiento  <- as.data.frame(cbind(rendimiento(CONFMAT.rl),rendimiento(CONFMAT.lda),rendimiento(CONFMAT.NB)))#Comparar y elegir el mejor(RL)
+colnames(CRendimiento)  <- c('RL','ADL','NB')
+CRendimiento#Con una diferencia no muy notoria RL es el que mejores resultados tiene, analizaremos en más profundidad este modelo. El modelo de regresión logística presenta una sensibilidad, especificidad, exactitud, precisión y F1 bastante alta, es bueno, identificando positivos reales, negativos reales, realizado las predicciones positivas y realizando predicciones en general; presenta un valor F1 alto que indica equilibrio entre precisión y sensibilidad y por último el fall out es bajo lo que significa que no comete muchos errores tipo 2. Este comentario se podría hacer también con los otros modelos, ya que las diferencias entre todos los indicadores de rendimiento consideramos que no son sustanciales.
+CONFMAT.rl2 <- round(prop.table(CONFMAT.rl),3)
+rownames(CONFMAT.rl2)  <- c('satisfied','neutral or dissatisfied')
+CONFMAT.rl2#Observamos que hay un 7,3% de errores tipo 1 y un 5,5% de errores tipo 2, un 50,6% de falsos reales y un 36,6% de verdaderos reales. En total hay un 12.8% por ciento de error. Para los demás modelos los valores deben ser parecidos, teniendo algunos errores más, pero no de manera significativa
+```
+
+```{r}
+#Procedemos a analizar las curvas ROC y los valores AUC
+predLR<- prediction(predict(mod_1, type= "response"),train$Satisfaction)
+perfLR <- performance( predLR, "tpr", "fpr" )
+preAD <- predict(mAD, test)$posterior
+predAD <- prediction(preAD[, 2], test$Satisfaction)
+perfAD <- performance(predAD, "tpr", "fpr")
+preNB <- predict(modelo, newdata = test, type = "raw")[, 2]
+predNB <- prediction(preNB, test$Satisfaction)
+perfNB <- performance(predNB, "tpr", "fpr")
+plot(perfAD, col = 'blue', main = "Comparación de Curvas ROC", xlab = "FPR", ylab = "TPR")
+plot(perfNB, col = 'red', add = TRUE)
+plot(perfLR, col = 'green', add = TRUE)
+abline(0, 1, col = 'black', lty = 2, lwd = 2)
+legend("bottomright", legend = c("Análisis discriminante lineal", "Naives Bayes",'Regresión Logística'), col = c("blue", "red",'green'), lty = 1)#Observamos las curvas de manera muy parecida siendo la "peor" el modelo NB
+cat('AUC del análisis discriminante lineal:', performance(predAD, 'auc')@y.values[[1]], '\n','AUC del Naive Bayes:',performance(predNB, 'auc')@y.values[[1]],'\n','AUC de la regresión logística:',performance(predLR, 'auc')@y.values[[1]],sep = '')#Todos los modelos son superiores a 0,9, por lo tanto, son muy buenos y no parece haber diferencias significativas entre ellos
+```
