@@ -1,0 +1,449 @@
+---
+title: "MÓDULO 3: FUNDAMENTOS DE MODELOS ESTADÍSTICOS"
+output: html_notebook
+---
+
+# PROBABILIDAD CON R
+
+* Simulamos el lanzamiento de 4 dados y nos preguntamos:
+ - ¿Cuál es la probabilidad de que la suma sea menor que 14?
+ - ¿Cuál es el valor esperado para la suma?
+
+```{r}
+set.seed(123)
+suma.dados <- rowSums(matrix(sample(1:6,4000,replace=TRUE),nrow=1000))
+barplot(table(suma.dados),col=c(rep('red',10),rep('grey',11)))
+mean(suma.dados)
+sum(suma.dados<14)/1000
+```
+La esperanza matemática es $E(X)=13.896$ y la probabilidad $Pr(X<14)=0.465$.
+
+
+La función `sample()` permite generar datos según una uniforme discreta... Nótese el argumento `replace`.
+
+* Simulamos el lanzamiento de 7 dados y nos preguntamos:
+ - ¿Cuál es la probabilidad de que la suma esté entre 15 y 27 puntos?
+ 
+```{r}
+set.seed(123)
+suma.dados <- rowSums(matrix(sample(1:6,700000,replace=TRUE),nrow=100000))
+barplot(table(suma.dados),col=c(rep('gray',7),rep('red',11),rep('grey',16)))
+sum(suma.dados >=15 & suma.dados<=27)/1000
+```
+ 
+* Supongamos que el nivel de inteligencia (CI) se puede describir razonablemente bien mediante un modelo de probabilidad normal con media 100 y desviación típica 15. ¿Cuál es la probabilidad de extraer al azar una persona con un CI entre 110 y 130 puntos?
+
+Podemos utilizar la función pnorm() para obtener $F(x)=Pr(X\leq x)$.
+
+```{r}
+diff(pnorm(c(110,130),mean=100,sd=15,lower.tail=TRUE))
+```
+
+En este caso se utiliza la función `diff()` para obtener la diferencia entre las dos probabilidades acumuladas ($F(130)-F(110)$).
+
+# ESTADÍSTICA DESCRIPTIVA CON R
+
+## Descripción univariante: Categóricas
+
+* Distribución de frecuencias y otros índices:
+
+- Mediante la función ``table()``:
+
+```{r fig.height=10,fig.width=10}
+library(ggpubr)
+library(tidyverse)
+library(ggQC)
+library(patchwork)
+library(scales)
+
+dfPreocup <- read.csv('Preocupaciones.csv',header=TRUE)
+preocupaciones <- data.frame(cbind(preocupaciones=names(table(dfPreocup$Preocupaciones)),frecuencia=table(dfPreocup$Preocupaciones)))
+preocupaciones$frecuencia <- as.numeric(preocupaciones$frecuencia)
+
+p1 <- ggbarplot(data=preocupaciones,x='preocupaciones',y='frecuencia',fill ='preocupaciones',label = TRUE,position = position_dodge(0.7),legend='bottom',ylim=c(0,360))
+
+labs <- paste(round(as.numeric(preocupaciones$frecuencia)/sum(as.numeric(preocupaciones$frecuencia))*100,2),'%',sep='')
+p2 <- ggpie(preocupaciones, "frecuencia", label = labs,
+            lab.pos = "in", lab.font = "white",
+            fill = "preocupaciones", color = "white",legend='none') +
+  theme(legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(-10,-10,-10,-10))
+
+p3 <- ggplot2::ggplot(preocupaciones, aes(x = preocupaciones, y = frecuencia)) +
+  ggQC::stat_pareto(point.color = "red",
+                    point.size = 3,
+                    line.color = "black",
+                    bars.fill = c('blue','lightblue')) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.5))
+
+p <-  (p1+p2)/p3
+p
+```
+
+- Algunos índices a partir de la tabla de frecuencias: moda, odds e índice de Blau
+
+```{r}
+moda <- with(preocupaciones,preocupaciones[frecuencia==max(frecuencia)])
+moda
+odds <- with(preocupaciones,frecuencia/(sum(frecuencia)-frecuencia))
+odds
+
+Blau <- 1 - sum(prop.table(preocupaciones$frecuencia)^2)
+Blau
+```
+
+## Descripción univariante: Numéricas
+
+* Algunos indicadores de tendencia central, posición, forma y dispersión:
+
+```{r}
+if(!require(e1071)){install.packages('e1071')
+  library(e1071)
+}
+
+bigfive <- read.csv('bigfive.csv',header=TRUE)
+
+descFUN <- function(x,...){
+  Min <- min(x,...)
+  M <- mean(x,...)
+  Max <- max(x,...)
+  SD <- sd(x,...)
+  Sk <- skewness(x,...)
+  K <- kurtosis(x,...)
+  c(Min,M,Max,SD,Sk,K)
+}
+
+resultados <- matrix(NA,6,ncol(bigfive))
+
+for(i in 1:ncol(bigfive)) resultados[,i] <- descFUN(bigfive[,i],na.rm=TRUE) 
+
+resultados <- round(resultados,2)
+colnames(resultados) <- colnames(bigfive)
+rownames(resultados) <- c('Mínimo','Media','Máximo','Desv. Típica','Asimetría','Kurtosis')
+
+resultados
+```
+
+* Gráficos para variables numéricas: histogramas superponiendo una curva normal.
+
+
+```{r fig.height=14.5,fig.width=14.5}
+myhist <- function(x,varname){
+  .h <- hist(x,plot = FALSE)
+  .h <- hist(x,col=scales::alpha('blue',0.03),main=varname,ylim=c(0,max(.h$counts)*1.25),xlab='',ylab='Frecuencias')
+  rug(x,col='green')
+  box()
+  lines(seq(min(x,na.rm=TRUE),max(x,na.rm=TRUE),0.0001),dnorm(seq(min(x,na.rm=TRUE),max(x,na.rm=TRUE),0.0001),
+        mean(x,na.rm=TRUE),sd(x,na.rm=TRUE))*diff(.h$mids[1:2]) * length(na.omit(x)),col='red')
+}
+
+par(mfrow=c(1,5))
+for(i in 1:5) myhist(x=bigfive[[i]],varname=names(bigfive)[i])
+```
+
+
+## Descripción bivariante: Categóricas
+
+* Tablas de contingencia:
+
+- Mediante la función ``table()``:
+
+```{r warning=FALSE,message=FALSE}
+Arthritis <- read.csv('Arthritis.csv',header=TRUE)
+
+tabcont <- with(Arthritis,table(Treatment,Improved))
+tabcont
+```
+
+* Índices $\chi^2$ de Pearson y V de Crámer:
+
+```{r}
+pearsonChi <- chisq.test(tabcont)$statistic
+cramerV <- sqrt(pearsonChi/(sum(tabcont)*
+                (min(dim(tabcont))-1)))
+names(cramerV) <-NULL
+cat(paste('Ji-cuadrado=',round(pearsonChi,2),
+          'y V de Cramér=',round(cramerV,2)))
+```
+
+* Gráficos:
+
+```{r fig.height=10.5,fig.width=20.5}
+par(mfrow=c(1,2))
+barplot(tabcont,beside=TRUE,legend.text=c('Placebo','Tratamiento'),
+        args.legend=list(x="top"),col=heat.colors(2))
+```
+
+
+## Descripción bivariante: Numéricas
+
+* Índices de asociación:
+
+- Matriz de varianzas-covarianzas: indicador de asociación lineal no acotado...
+
+```{r}
+round(cov(bigfive, use ='pairwise.complete.obs'),2)
+# Argumento use nos permite seleccionar el tratamiento a los valores perdidos.
+```
+
+- Matriz de correlaciones: argumento `method` permite especificar el tipo de correlación.
+
+```{r}
+# Correlación entre amabilidad y responsabilidad
+
+cat(paste(c('Pearson = ','Spearman = ','Kendall = '),
+          round(c(cor(bigfive[4:5],use ='pairwise.complete.obs')[1,2],cor(bigfive[4:5],method='spearman',use ='pairwise.complete.obs')[1,2],
+                  cor(bigfive[4:5],method='kendall',use ='pairwise.complete.obs')[1,2]),2),c(';',' y','.'),sep=''))
+
+# En este ejemplo no accedemos a toda la matriz de correlaciones si no únicamente a una posición que ocupa la correlación
+```
+
+Recordad que las correlaciones toman valores entre -1 y 1.
+
+* Gráficos
+
+- Diagramas de dispersión:
+
+```{r fig.height=6.5,fig.width=6.5}
+ggplot(bigfive,aes(Amabilidad,Apertura)) +
+  geom_jitter(col=scales::alpha('black',0.1)) +
+  theme_bw() +
+  ggtitle('NEO-FFI; N=2800')
+```
+
+# INFERENCIA ESTADÍSTICA CON R
+
+
+## Estimación por intervalo
+
+* Una media poblacional: supongamos que queremos estimar la media de una población a partir de una muestra de 30 personas. En este caso, simulamos los datos pero piénsese en que en una situación normal estos datos se recogerían de una muestra. Se utilizará un nivel de confianza del $80\%$.
+
+La función `t.test()` incorpora un intervalo de confianza para una muestra:
+
+```{r}
+set.seed(123)     
+x <- rnorm(30,mean=66,sd=4)     
+t.test(x,conf.level=0.8)
+```
+Así, el intervalo de confianza para la media con un nivel de confianza del $95\%$ es $[64.87;66.75]$.
+
+
+* Diferencia de medias: utilizamos la base de datos normtemp para estimar la diferencia de medias poblacional entre hombres y mujeres en cuanto a la temperatura corporal. Nuevamente mediante la función `t.test()`:
+
+
+```{r}
+if(!require(UsingR)){install.packages('UsingR')
+  library(UsingR)
+}
+library(car)
+data(normtemp)
+normtemp$gender.rec <- factor(recode(var = normtemp$gender, recodes="1='Hombre';2='Mujer'"))
+t.test(temperature~gender.rec,var.equal=TRUE,data=normtemp)$conf.int
+```
+
+La función devuelve una lista con varios elementos, entre ellos, el intervalo de confianza. Para acceder al elemento se utiliza el operador `$`. Nótese que en este ejemplo, el intervalo incluye únicamente valores negativos.
+
+* Proporción: se quiere estimar por intervalo la proporción de niños de 12 años que disponen de un teléfono móvil a partir de una muestra de 200 niños en los que se ha observado que el $45\%$ de ellos disponen de un smartphone.
+
+ - Solución aproximada con distribución normal:
+
+```{r}
+prop.muestra <- 0.45
+n <- 200
+prop.test(n*prop.muestra,n)$conf.int
+```
+
+ - Solución exacta con distrubución binomial:
+
+```{r}
+binom.test(n*prop.muestra,n)
+```
+Ambas estimaciones dan como resultado intervalos aproximados entre $0.38$ y $0.52$.
+
+* Estimación por intervalo de una razón de varianzas: la variabilidad en la temperatura corporal en hombres y mujeres.
+
+```{r}
+var.test(temperature~gender.rec,data=normtemp)
+```
+El intervalo de confianza para la razón de varianzas con un nivel de confianza $1-\alpha=0.95$ incluye el valor 1, por lo que podemos pensar que en la población de origen las dos varianzas son iguales.
+
+
+## Pruebas paramétricas
+
+* Prueba t para grupos independientes: diferencias en frecuencia cardíaca entre hombres y mujeres. El contraste es de tipo bilateral:
+
+$H_0: \mu_H-\mu_M=0$.
+
+
+```{r}
+t.test(hr~gender,data=normtemp,var.equal=TRUE)
+```
+
+Un indicador del tamaño del efecto
+
+```{r}
+if(!require(effectsize)){ install.packages('effectsize')
+   library(effectsize)}
+   
+with(normtemp,cohens_d(hr~gender))
+```
+
+El contraste por defecto es bilateral pero cambiando las opciones del argumento `alternative` se puede llevar a cabo un contraste unilateral.
+
+
+* Prueba t para medidas repetidas: ¿ha mejorado la memoria visual tras el entrenamiento?
+
+En este caso se utilizará un contraste unilateral: $H_0: \mu_{Antes}-\mu_{Después}\geq 0$.
+
+```{r}
+visualMemory <- read.table('visualMemory.txt',header=TRUE)
+with(visualMemory,t.test(before,after,paired=TRUE,alternative='less'))
+```
+En este caso el intervalo de confianza no es el correcto, volvemos a ejecutar un contraste bilateral y extraemos el intervalo de confianza:
+
+```{r}
+with(visualMemory,t.test(before,after,paired=TRUE,alternative='two.sided')$conf.int)
+```
+
+ Tamaño del efecto:
+ 
+```{r}
+with(visualMemory,cohens_d(before,after,paired=TRUE))
+```
+ 
+
+* Análisis de la varianza: ¿hay diferencias entre las distintas condiciones en cuanto al crecimiento de las plantas? ¿hay alguna condición óptima?
+
+La hipótesis nula establece que no hay diferencias entre los grupos: $H_0:\mu_1=\mu_2=\mu_3$.
+
+```{r}
+data("PlantGrowth")
+boxplot(weight~group,data=PlantGrowth)
+avar <- aov(weight~group,data=PlantGrowth)
+summary(avar)
+```
+
+Hay diferencias significativas entre los grupos. El tamaño del efecto calculado con $\eta^2$ es:
+
+```{r}
+eta_squared(avar)
+```
+
+Contrastes a posteriori (Tukey) muestran que las diferencias significativas están entre grupos trt1 y trt2:
+
+```{r}
+library(multcomp)
+summary(glht(avar,linfct = mcp(group='Tukey')))
+```
+
+```{r}
+plot(glht(avar,linfct = mcp(group='Tukey')))
+```
+
+
+* Correlación de Pearson: ¿están la amabilidad y la extroversión de las personas asociadas linealmente en la población? ¿cuál es el tamaño de la asociación?
+
+La hipótesis nula establece la ausencia de relación: $H_0:\rho_{XY}=0$.
+
+```{r}
+
+with(bigfive,cor.test(Amabilidad,Extraversion))
+```
+
+Existe una relación lineal positiva de intensidad elevada.
+
+## Pruebas no paramétricas
+
+* Prueba Ji-Cuadradado: $H_0:\pi_{ij}=\pi_i\pi_j$
+
+```{r}
+Arthritis <- read.csv('Arthritis.csv',header=TRUE)
+tabcont <- with(Arthritis,table(Treatment,Improved))
+chisq.test(tabcont)$expected # Todas las frecuencias esperadas son mayores de 5
+chisq.test(tabcont)
+```
+
+Recordad que la condición de aplicación es que todas las frecuencias esperadas sean $\geq 5$.
+
+
+* Pruebas de normalidad: $H_0:F(X)=\Phi(X)$.
+
+```{r}
+shapiro.test(bigfive$Amabilidad)
+```
+
+Existe una desviación significativa respecto al patrón normal.
+
+
+* Prueba para comparar 2 muestras independientes: prueba de suma de rangos o U de Mann-Whitney.
+
+$H_0:F_1(X)=F_2(X)$
+
+```{r}
+wilcox.test(hr~gender,data=normtemp,conf.int=TRUE)
+```
+
+* Prueba de Levene para homogeneidad de varianzas: $H_0:\frac{\sigma_1^2}{\sigma_2^2}=1$
+
+```{r}
+car::leveneTest(hr~factor(gender),data=normtemp)
+```
+
+Las varianzas son significativamente desiguales.
+
+* Prueba para comparar 2 medidas repetidas o muestras relacionadas: prueba de rangos con signo o T de Wilcoxon.
+
+```{r}
+with(visualMemory,wilcox.test(before,after,paired=TRUE,
+     alternative='less',conf.int=TRUE))
+```
+
+* Prueba no paramétrica para comparar  k muestras independientes: Prueba de Kruskal-Wallis
+
+```{r}
+kruskal.test(weight~group,data=PlantGrowth)
+```
+
+* Prueba no paramétrica para comparar  k muestras relacionadas: Prueba $\chi^2$ de Friedman
+
+- ¿Hay diferencias entre las condiciones de medición por la que pasan todos los bateadores?
+
+```{r}
+RoundingTimes <-
+matrix(c(5.40, 5.50, 5.55,
+         5.85, 5.70, 5.75,
+         5.20, 5.60, 5.50,
+         5.55, 5.50, 5.40,
+         5.90, 5.85, 5.70,
+         5.45, 5.55, 5.60,
+         5.40, 5.40, 5.35,
+         5.45, 5.50, 5.35,
+         5.25, 5.15, 5.00,
+         5.85, 5.80, 5.70,
+         5.25, 5.20, 5.10,
+         5.65, 5.55, 5.45,
+         5.60, 5.35, 5.45,
+         5.05, 5.00, 4.95,
+         5.50, 5.50, 5.40,
+         5.45, 5.55, 5.50,
+         5.55, 5.55, 5.35,
+         5.45, 5.50, 5.55,
+         5.50, 5.45, 5.25,
+         5.65, 5.60, 5.40,
+         5.70, 5.65, 5.55,
+         6.30, 6.30, 6.25),
+       nrow = 22,
+       byrow = TRUE,
+       dimnames = list(1 : 22,
+                       c("Round Out", "Narrow Angle", "Wide Angle")))
+head(RoundingTimes)
+friedman.test(RoundingTimes)
+```
+
+* Pruebas no paramétricas basadas en correlaciones: Spearman y Kendall
+
+```{r}
+with(bigfive,cor.test(Amabilidad,Extraversion,method='spearman'))
+
+with(bigfive,cor.test(Amabilidad,Extraversion,method='kendall'))
+```
