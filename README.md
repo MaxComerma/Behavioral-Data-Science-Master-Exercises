@@ -2,6 +2,8 @@
 
 Selected coursework and projects developed during the MSc in Behavioral Data Science at IL3–Universitat de Barcelona.
 
+> **Language:** The coursework and exercises are mainly in Spanish.
+
 ## ⭐ Featured Projects
 
 - [Machine Learning — Classification & Model Comparison](./Machine%20Learning/)
