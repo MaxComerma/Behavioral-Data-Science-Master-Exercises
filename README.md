@@ -26,7 +26,7 @@ The repository covers data management, statistical modelling, psychometrics, mac
 | `Módulo 7/Machine Learning/Grupo E_Reto_2.ipynb.ipynb` | Binary diabetes classification | SVM, RBF kernel | Test F1 **0.9109** for the reported RBF configuration |
 | `Módulo 7/Machine Learning/Grupo E_Reto_2.ipynb.ipynb` | Binary diabetes classification | Random Forest | Test F1 **0.9388** for the reported configuration |
 | `Módulo 7/Machine Learning/Grupo E_Reto_2.ipynb.ipynb` | Robustness to noisy data | KNN | Test accuracy decreased from **0.89** without noise to **0.87** with noise |
-| `Módulo 9/Deep Learning/Reto1/Informe Final Reto 1.pdf` | Age prediction and bias mitigation | Neural network + weighted loss | `Test MAE 4.30; Age bias 2.11; Gender bias 0.09; Ethnicity bias 0.41; Expression bias 0.06; Average bias 0.67.` |
+| `Módulo 9/Deep Learning/Reto1/Informe Final Reto 1.pdf` | Age prediction and bias mitigation | Neural network + weighted loss | Test MAE 4.30; Age bias 2.11; Gender bias 0.09; Ethnicity bias 0.41; Expression bias 0.06; Average bias 0.67. |
 
 ## Coursework index
 
